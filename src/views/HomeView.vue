@@ -10,16 +10,15 @@ interface Location {
   country: string
   latitude: number
   longitude: number
-  weather?: {
-    forecast:
-      | {
-          temperature: []
-          time: []
-        }
-      | string
+  weather: {
+    forecast: {
+      temperature: number[]
+      time: string[]
+    }
 
     currentConditions: string
   }
+  showForecast: boolean
 }
 
 const cityName = ref<string>('Berlin')
@@ -35,8 +34,8 @@ const formattedLocations = ref<
     countryName: string
     latitude: number
     longitude: number
-    currentWeather: string | undefined
-    forecast: { [key: string]: number[] }
+    currentWeather: string
+    forecast: { [key: string]: [number, string][] }
     showForecast: boolean
   }[]
 >([])
@@ -81,7 +80,7 @@ const fetchLocations = async () => {
         } catch (err) {
           console.error('Failed to fetch weather data for location:', location.name, err)
           location.weather = {
-            forecast: 'N/A',
+            forecast: { temperature: [], time: [] },
             currentConditions: 'N/A'
           }
         }
@@ -94,19 +93,20 @@ const fetchLocations = async () => {
         countryName: loc.country,
         latitude: loc.latitude,
         longitude: loc.longitude,
-        currentWeather: loc.weather?.currentConditions,
-        forecast: {} as { [key: string]: number[] },
+        currentWeather: loc.weather.currentConditions,
+        forecast: {} as { [key: string]: [number, string][] },
         showForecast: false
       }
 
       if (loc.weather && typeof loc.weather.forecast !== 'string') {
-        loc.weather?.forecast.time.forEach((date, index) => {
+        loc.weather.forecast.time.forEach((date, index) => {
           const formattedDate = formatTime(date)[0]
           if (!location.forecast[formattedDate]) {
             location.forecast[formattedDate] = []
           }
-          const temperature = loc.weather?.forecast.temperature[index]
-          const time = formatTime(loc.weather?.forecast.time[index])[1]
+          const temperature = loc.weather.forecast.temperature[index]
+          console.log(loc.weather.forecast.temperature)
+          const time = formatTime(loc.weather.forecast.time[index])[1]
           location.forecast[formattedDate].push([temperature, time])
         })
       }
@@ -131,7 +131,7 @@ const formatTime = (utcTime: string) => {
   return [format(localTime, 'MMM do'), format(localTime, 'HH:mm')]
 }
 
-const toggleForecast = (location) => {
+const toggleForecast = (location: Location) => {
   location.showForecast = !location.showForecast
 }
 
@@ -174,7 +174,7 @@ onMounted(fetchLocations)
           <h3>{{ location.cityName }}, {{ location.countryName }}</h3>
           <div v-if="location.currentWeather">
             <p>Current Conditions: {{ location.currentWeather }} °C</p>
-            <button @click="toggleForecast(location)">
+            <button @click="toggleForecast(location as unknown as Location)">
               {{ location.showForecast ? 'Hide forecast' : 'Show forecast' }}
             </button>
             <div v-if="location.showForecast">
