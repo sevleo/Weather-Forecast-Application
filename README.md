@@ -37,3 +37,6 @@ npm run build
 ```sh
 npm run lint
 ```
+
+https://api.open-meteo.com/v1/forecast?latitude=55.7522&longitude=37.6156&hourly=temperature_2m&current=temperature_2m&start_date=2024-04-02&end_date=2024-04-03
+https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m,wind_speed_10m&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m

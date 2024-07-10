@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { format, parseISO } from 'date-fns'
 
+const dataLoaded = ref<boolean>(false)
+
 interface Location {
   name: string
   country: string
@@ -22,10 +24,22 @@ interface Location {
 
 const cityName = ref<string>('Berlin')
 const resultCount = ref<number>(10)
-const daysCount = ref<number>(5)
+const daysCount = ref<number>(3)
 
 const locations = ref<Location[]>([])
 const error = ref<string | null>(null)
+
+const formattedLocations = ref<
+  {
+    cityName: string
+    countryName: string
+    latitude: number
+    longitude: number
+    currentWeather: string | undefined
+    forecast: { [key: string]: number[] }
+    showForecast: boolean
+  }[]
+>([])
 
 const fetchLocations = async () => {
   try {
@@ -51,19 +65,18 @@ const fetchLocations = async () => {
               latitude: location.latitude,
               longitude: location.longitude,
               hourly: 'temperature_2m',
+              current: 'temperature_2m',
               start_date: format(today, 'yyyy-MM-dd'),
               end_date: format(endDay, 'yyyy-MM-dd')
             }
           })
-
-          console.log(weatherResponse)
 
           location.weather = {
             forecast: {
               temperature: weatherResponse.data.hourly.temperature_2m,
               time: weatherResponse.data.hourly.time
             },
-            currentConditions: weatherResponse.data.currentConditions
+            currentConditions: weatherResponse.data.current.temperature_2m
           }
         } catch (err) {
           console.error('Failed to fetch weather data for location:', location.name, err)
@@ -74,9 +87,37 @@ const fetchLocations = async () => {
         }
       })
     )
+
+    formattedLocations.value = locations.value.map((loc) => {
+      const location = {
+        cityName: loc.name,
+        countryName: loc.country,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        currentWeather: loc.weather?.currentConditions,
+        forecast: {} as { [key: string]: number[] },
+        showForecast: false
+      }
+
+      if (loc.weather && typeof loc.weather.forecast !== 'string') {
+        loc.weather?.forecast.time.forEach((date, index) => {
+          const formattedDate = formatTime(date)[0]
+          if (!location.forecast[formattedDate]) {
+            location.forecast[formattedDate] = []
+          }
+          const temperature = loc.weather?.forecast.temperature[index]
+          const time = formatTime(loc.weather?.forecast.time[index])[1]
+          location.forecast[formattedDate].push([temperature, time])
+        })
+      }
+
+      return location
+    })
+    dataLoaded.value = true
   } catch (err) {
     error.value =
       axios.isAxiosError(err) && err.response ? err.response.data : 'An unknown error occurred'
+    dataLoaded.value = true
   }
 }
 
@@ -87,7 +128,11 @@ const formatTime = (utcTime: string) => {
   const dateTimezoneOffsetMilliseconds = dateTimezoneOffset * 60000 // Calculating offset in milliseconds
   const localTime = new Date(dateTime - dateTimezoneOffsetMilliseconds) // Calculating local time
 
-  return format(localTime, 'yyyy-MM-dd HH:mm')
+  return [format(localTime, 'MMM do'), format(localTime, 'HH:mm')]
+}
+
+const toggleForecast = (location) => {
+  location.showForecast = !location.showForecast
 }
 
 onMounted(fetchLocations)
@@ -95,61 +140,62 @@ onMounted(fetchLocations)
 
 <template>
   <main>
-    <div>
-      <label
-        >City name:
-        <input v-model="cityName" type="text" />
-      </label>
-      <label>
-        Number of results:
-        <select v-model="resultCount">
-          <option value="1">1</option>
-          <option value="10">10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-      </label>
-      <label>
-        Number of days:
-        <select v-model="daysCount">
-          <option :value="1">1</option>
-          <option :value="2">2</option>
-          <option :value="3">3</option>
-          <option :value="4">4</option>
-          <option :value="5">5</option>
-        </select>
-      </label>
-      <button @click="fetchLocations">Search</button>
-    </div>
-    <div v-if="error">{{ error }}</div>
-    <ul v-else>
-      <li v-for="location in locations" :key="location.latitude + location.longitude">
-        <h3>{{ location.name }}, {{ location.country }}</h3>
-        <div v-if="location.weather">
-          <div v-if="typeof location.weather.forecast === 'string'">
-            <p>Current Conditions: {{ location.weather.currentConditions }}</p>
-            <p>
-              Forecast:
-              {{ location.weather.forecast }}
-            </p>
+    <div v-if="dataLoaded === true">
+      <div>
+        <label
+          >City name:
+          <input v-model="cityName" type="text" />
+        </label>
+        <label>
+          Number of results:
+          <select v-model="resultCount">
+            <option value="1">1</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <label>
+          Number of days:
+          <select v-model="daysCount">
+            <option :value="1">1</option>
+            <option :value="2">2</option>
+            <option :value="3">3</option>
+            <option :value="4">4</option>
+            <option :value="5">5</option>
+          </select>
+        </label>
+        <button @click="fetchLocations">Search</button>
+      </div>
+      <div v-if="error">{{ error }}dadada</div>
+      <ul v-else>
+        <li v-for="location in formattedLocations" :key="location.latitude + location.longitude">
+          <h3>{{ location.cityName }}, {{ location.countryName }}</h3>
+          <div v-if="location.currentWeather">
+            <p>Current Conditions: {{ location.currentWeather }} °C</p>
+            <button @click="toggleForecast(location)">
+              {{ location.showForecast ? 'Hide forecast' : 'Show forecast' }}
+            </button>
+            <div v-if="location.showForecast">
+              <div v-for="(temperatures, date) in location.forecast" :key="date">
+                <h4>{{ date }}</h4>
+                <ul>
+                  <li v-for="[temperature, time] in temperatures" :key="time">
+                    {{ time }} - {{ temperature }} °C
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
-          <table v-else>
-            <p>Current Conditions: {{ location.weather.currentConditions }}</p>
-
-            <tbody>
-              <tr
-                v-for="(temperature, index) in location.weather.forecast.temperature"
-                :key="index"
-              >
-                <td>{{ formatTime(location.weather.forecast.time[index]) }}</td>
-                <!-- <td>{{ format(location.weather.forecast.time[index], 'yyyy-MM-dd HH:mm') }}</td> -->
-                <td>{{ temperature }} °C</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </li>
-    </ul>
+        </li>
+      </ul>
+    </div>
+    <div v-else>
+      loading...
+      <div>
+        <b-spinner class="m-5" label="Busy"></b-spinner>
+      </div>
+    </div>
   </main>
 </template>
