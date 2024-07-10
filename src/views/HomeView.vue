@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { format, parseISO } from 'date-fns'
 
 interface Location {
   name: string
@@ -8,13 +9,20 @@ interface Location {
   latitude: number
   longitude: number
   weather?: {
-    forecast: string
+    forecast:
+      | {
+          temperature: []
+          time: []
+        }
+      | string
+
     currentConditions: string
   }
 }
 
 const cityName = ref<string>('Berlin')
 const resultCount = ref<number>(10)
+const daysCount = ref<number>(5)
 
 const locations = ref<Location[]>([])
 const error = ref<string | null>(null)
@@ -31,6 +39,10 @@ const fetchLocations = async () => {
     })
     locations.value = response.data.results
 
+    const today = new Date()
+    const endDay = new Date()
+    endDay.setDate(today.getDate() + daysCount.value - 1)
+
     await Promise.all(
       locations.value.map(async (location) => {
         try {
@@ -39,12 +51,18 @@ const fetchLocations = async () => {
               latitude: location.latitude,
               longitude: location.longitude,
               hourly: 'temperature_2m',
-              start_date: '2024-04-02',
-              end_date: '2024-04-03'
+              start_date: format(today, 'yyyy-MM-dd'),
+              end_date: format(endDay, 'yyyy-MM-dd')
             }
           })
+
+          console.log(weatherResponse)
+
           location.weather = {
-            forecast: weatherResponse.data.forecast,
+            forecast: {
+              temperature: weatherResponse.data.hourly.temperature_2m,
+              time: weatherResponse.data.hourly.time
+            },
             currentConditions: weatherResponse.data.currentConditions
           }
         } catch (err) {
@@ -60,6 +78,16 @@ const fetchLocations = async () => {
     error.value =
       axios.isAxiosError(err) && err.response ? err.response.data : 'An unknown error occurred'
   }
+}
+
+const formatTime = (utcTime: string) => {
+  const date = parseISO(utcTime) // Parsing ISO date
+  const dateTime = date.getTime() // Extracting time value
+  const dateTimezoneOffset = date.getTimezoneOffset() // Retreiving timezone offset from GMT
+  const dateTimezoneOffsetMilliseconds = dateTimezoneOffset * 60000 // Calculating offset in milliseconds
+  const localTime = new Date(dateTime - dateTimezoneOffsetMilliseconds) // Calculating local time
+
+  return format(localTime, 'yyyy-MM-dd HH:mm')
 }
 
 onMounted(fetchLocations)
@@ -82,17 +110,45 @@ onMounted(fetchLocations)
           <option value="100">100</option>
         </select>
       </label>
+      <label>
+        Number of days:
+        <select v-model="daysCount">
+          <option :value="1">1</option>
+          <option :value="2">2</option>
+          <option :value="3">3</option>
+          <option :value="4">4</option>
+          <option :value="5">5</option>
+        </select>
+      </label>
       <button @click="fetchLocations">Search</button>
     </div>
     <div v-if="error">{{ error }}</div>
     <ul v-else>
       <li v-for="location in locations" :key="location.latitude + location.longitude">
         <h3>{{ location.name }}, {{ location.country }}</h3>
-        <p>Forecast: {{ location.weather ? location.weather.forecast : 'Loading...' }}</p>
-        <p>
-          Current Conditions:
-          {{ location.weather ? location.weather.currentConditions : 'Loading...' }}
-        </p>
+        <div v-if="location.weather">
+          <div v-if="typeof location.weather.forecast === 'string'">
+            <p>Current Conditions: {{ location.weather.currentConditions }}</p>
+            <p>
+              Forecast:
+              {{ location.weather.forecast }}
+            </p>
+          </div>
+          <table v-else>
+            <p>Current Conditions: {{ location.weather.currentConditions }}</p>
+
+            <tbody>
+              <tr
+                v-for="(temperature, index) in location.weather.forecast.temperature"
+                :key="index"
+              >
+                <td>{{ formatTime(location.weather.forecast.time[index]) }}</td>
+                <!-- <td>{{ format(location.weather.forecast.time[index], 'yyyy-MM-dd HH:mm') }}</td> -->
+                <td>{{ temperature }} °C</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </li>
     </ul>
   </main>
