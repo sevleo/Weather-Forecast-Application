@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { format, parseISO } from 'date-fns'
+import { format, isAfter, parseISO } from 'date-fns'
 
 const dataLoaded = ref<boolean>(false)
 
@@ -96,6 +96,7 @@ const fetchWeatherData = (startDate: Date, endDate: Date) => async (location: Lo
 }
 
 const formatLocations = () => {
+  const currentTime = new Date()
   formattedLocations.value = locations.value.map((loc) => {
     const formattedLocation = {
       cityName: loc.name,
@@ -108,12 +109,17 @@ const formatLocations = () => {
     }
 
     loc.weather.forecast.time.forEach((date, index) => {
-      const [formattedDate, time] = formatTime(date)
-      if (!formattedLocation.forecast[formattedDate]) {
-        formattedLocation.forecast[formattedDate] = []
+      const forecastDate = formatTime2(date)
+
+      if (isAfter(forecastDate, currentTime)) {
+        // Do not include times less than current user time
+        const [formattedDate, time] = formatTime(date)
+        if (!formattedLocation.forecast[formattedDate]) {
+          formattedLocation.forecast[formattedDate] = []
+        }
+        const temperature = loc.weather.forecast.temperature[index]
+        formattedLocation.forecast[formattedDate].push([temperature, time])
       }
-      const temperature = loc.weather.forecast.temperature[index]
-      formattedLocation.forecast[formattedDate].push([temperature, time])
     })
 
     return formattedLocation
@@ -128,6 +134,15 @@ const formatTime = (utcTime: string) => {
   const localTime = new Date(dateTime - dateTimezoneOffsetMilliseconds) // Calculating local time
 
   return [format(localTime, 'MMM do'), format(localTime, 'HH:mm')]
+}
+
+const formatTime2 = (utcTime: string) => {
+  const date = parseISO(utcTime)
+  const dateTime = date.getTime()
+  const dateTimezoneOffset = date.getTimezoneOffset()
+  const dateTimezoneOffsetMilliseconds = dateTimezoneOffset * 60000
+  const localTime = new Date(dateTime - dateTimezoneOffsetMilliseconds)
+  return localTime
 }
 
 const handleError = (err: unknown) => {
