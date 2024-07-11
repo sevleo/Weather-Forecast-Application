@@ -105,7 +105,7 @@ const fetchLocations = async () => {
             location.forecast[formattedDate] = []
           }
           const temperature = loc.weather.forecast.temperature[index]
-          console.log(loc.weather.forecast.temperature)
+          // console.log(loc.weather.forecast.temperature)
           const time = formatTime(loc.weather.forecast.time[index])[1]
           location.forecast[formattedDate].push([temperature, time])
         })
@@ -142,6 +142,13 @@ onMounted(fetchLocations)
   <main>
     <div v-if="dataLoaded === true">
       <div>
+        <p class="top-name">Weather Forecast Application</p>
+      </div>
+      <div class="divider"></div>
+    </div>
+
+    <div v-if="dataLoaded === true" class="main">
+      <div class="params">
         <label
           >City name:
           <input v-model="cityName" type="text" />
@@ -171,7 +178,8 @@ onMounted(fetchLocations)
       <div v-if="error">{{ error }}dadada</div>
       <ul v-else>
         <li v-for="location in formattedLocations" :key="location.latitude + location.longitude">
-          <h3>{{ location.cityName }}, {{ location.countryName }}</h3>
+          <p>{{ location.cityName }}, {{ location.countryName }}</p>
+          <p>Latitude: {{ location.latitude }}, Longitude: {{ location.longitude }}</p>
           <div v-if="location.currentWeather">
             <p>Current Conditions: {{ location.currentWeather }} °C</p>
             <button @click="toggleForecast(location as unknown as Location)">
@@ -191,11 +199,36 @@ onMounted(fetchLocations)
         </li>
       </ul>
     </div>
-    <div v-else>
-      loading...
-      <div>
-        <b-spinner class="m-5" label="Busy"></b-spinner>
-      </div>
-    </div>
+    <div v-else>loading...</div>
   </main>
 </template>
+
+<style scoped>
+li {
+  margin-bottom: 20px;
+}
+.main {
+  padding: 20px;
+  display: flex;
+  align-items: start;
+}
+.params {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: start;
+  gap: 10px;
+  flex-direction: column;
+}
+
+.top-name {
+  font-size: 30px;
+  text-align: center;
+}
+.divider {
+  width: 100%;
+  height: 0.5px;
+  background-color: white;
+  margin: 20px;
+}
+</style>
