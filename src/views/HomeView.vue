@@ -24,10 +24,8 @@ interface Location {
 const cityName = ref<string>('Berlin')
 const resultCount = ref<number>(10)
 const daysCount = ref<number>(3)
-
 const locations = ref<Location[]>([])
 const error = ref<string | null>(null)
-
 const formattedLocations = ref<
   {
     cityName: string
@@ -40,9 +38,12 @@ const formattedLocations = ref<
   }[]
 >([])
 
+const API_BASE_URL = 'https://api.open-meteo.com/v1'
+const GEOCODING_API_URL = 'https://geocoding-api.open-meteo.com/v1/search'
+
 const fetchLocations = async () => {
   try {
-    const response = await axios.get('https://geocoding-api.open-meteo.com/v1/search', {
+    const response = await axios.get(GEOCODING_API_URL, {
       params: {
         name: cityName.value,
         count: resultCount.value,
@@ -56,69 +57,67 @@ const fetchLocations = async () => {
     const endDay = new Date()
     endDay.setDate(today.getDate() + daysCount.value - 1)
 
-    await Promise.all(
-      locations.value.map(async (location) => {
-        try {
-          const weatherResponse = await axios.get('https://api.open-meteo.com/v1/forecast', {
-            params: {
-              latitude: location.latitude,
-              longitude: location.longitude,
-              hourly: 'temperature_2m',
-              current: 'temperature_2m',
-              start_date: format(today, 'yyyy-MM-dd'),
-              end_date: format(endDay, 'yyyy-MM-dd')
-            }
-          })
+    await Promise.all(locations.value.map(fetchWeatherData(today, endDay)))
 
-          location.weather = {
-            forecast: {
-              temperature: weatherResponse.data.hourly.temperature_2m,
-              time: weatherResponse.data.hourly.time
-            },
-            currentConditions: weatherResponse.data.current.temperature_2m
-          }
-        } catch (err) {
-          console.error('Failed to fetch weather data for location:', location.name, err)
-          location.weather = {
-            forecast: { temperature: [], time: [] },
-            currentConditions: 'N/A'
-          }
-        }
-      })
-    )
-
-    formattedLocations.value = locations.value.map((loc) => {
-      const location = {
-        cityName: loc.name,
-        countryName: loc.country,
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        currentWeather: loc.weather.currentConditions,
-        forecast: {} as { [key: string]: [number, string][] },
-        showForecast: false
-      }
-
-      if (loc.weather && typeof loc.weather.forecast !== 'string') {
-        loc.weather.forecast.time.forEach((date, index) => {
-          const formattedDate = formatTime(date)[0]
-          if (!location.forecast[formattedDate]) {
-            location.forecast[formattedDate] = []
-          }
-          const temperature = loc.weather.forecast.temperature[index]
-          // console.log(loc.weather.forecast.temperature)
-          const time = formatTime(loc.weather.forecast.time[index])[1]
-          location.forecast[formattedDate].push([temperature, time])
-        })
-      }
-
-      return location
-    })
+    formatLocations()
     dataLoaded.value = true
   } catch (err) {
-    error.value =
-      axios.isAxiosError(err) && err.response ? err.response.data : 'An unknown error occurred'
-    dataLoaded.value = true
+    handleError(err)
   }
+}
+
+const fetchWeatherData = (startDate: Date, endDate: Date) => async (location: Location) => {
+  try {
+    const weatherResponse = await axios.get(`${API_BASE_URL}/forecast`, {
+      params: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        hourly: 'temperature_2m',
+        current: 'temperature_2m',
+        start_date: format(startDate, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd')
+      }
+    })
+
+    location.weather = {
+      forecast: {
+        temperature: weatherResponse.data.hourly.temperature_2m,
+        time: weatherResponse.data.hourly.time
+      },
+      currentConditions: weatherResponse.data.current.temperature_2m
+    }
+  } catch (err) {
+    console.error('Failed to fetch weather data for location:', location.name, err)
+    location.weather = {
+      forecast: { temperature: [], time: [] },
+      currentConditions: 'N/A'
+    }
+  }
+}
+
+const formatLocations = () => {
+  formattedLocations.value = locations.value.map((loc) => {
+    const formattedLocation = {
+      cityName: loc.name,
+      countryName: loc.country,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      currentWeather: loc.weather.currentConditions,
+      forecast: {} as { [key: string]: [number, string][] },
+      showForecast: false
+    }
+
+    loc.weather.forecast.time.forEach((date, index) => {
+      const [formattedDate, time] = formatTime(date)
+      if (!formattedLocation.forecast[formattedDate]) {
+        formattedLocation.forecast[formattedDate] = []
+      }
+      const temperature = loc.weather.forecast.temperature[index]
+      formattedLocation.forecast[formattedDate].push([temperature, time])
+    })
+
+    return formattedLocation
+  })
 }
 
 const formatTime = (utcTime: string) => {
@@ -129,6 +128,15 @@ const formatTime = (utcTime: string) => {
   const localTime = new Date(dateTime - dateTimezoneOffsetMilliseconds) // Calculating local time
 
   return [format(localTime, 'MMM do'), format(localTime, 'HH:mm')]
+}
+
+const handleError = (err: unknown) => {
+  if (axios.isAxiosError(err) && err.response) {
+    error.value = err.response.data
+  } else {
+    error.value = 'An unknown error occurred'
+  }
+  dataLoaded.value = true
 }
 
 const toggleForecast = (location: Location) => {
